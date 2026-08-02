@@ -7,9 +7,7 @@ interface SessionPanelProps {
   onReset: () => void;
 }
 
-/* What was indexed, kept visible while you ask questions - the two chunk
-   counts are the clearest evidence that the repo really is being treated as
-   two separate sources. */
+
 export function SessionPanel({
   repoUrl,
   stats,

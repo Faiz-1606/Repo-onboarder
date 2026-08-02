@@ -1,15 +1,3 @@
-"""Turn retrieved context into a written answer.
-
-The model is called over the OpenAI-compatible /chat/completions endpoint.
-Ollama, Groq, Google Gemini and OpenRouter all speak it, so which model
-answers is a deployment-time setting rather than a code change: a local model
-on your machine, a free hosted one on a deployed instance, one code path.
-
-Synthesis stays optional either way. If the model is unreachable, rejects the
-request, or answers with something unexpected, the retrieved context is
-returned with its citations intact rather than the request failing - retrieval
-has already succeeded by the time this code runs.
-"""
 
 from __future__ import annotations
 
@@ -67,7 +55,6 @@ def synthesize_answer(question: str, context: str) -> str:
         ],
     }
 
-    # rstrip so the setting works whether or not it was given a trailing slash.
     url = f"{LLM_BASE_URL.rstrip('/')}/chat/completions"
 
     try:
@@ -76,9 +63,7 @@ def synthesize_answer(question: str, context: str) -> str:
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        # The provider answered, but refused. 401/403 almost always means the
-        # key is missing or wrong; 404 usually means the model name is not one
-        # this provider serves.
+   
         return _context_with_note(
             f"the model provider returned HTTP {exc.response.status_code} for "
             f"model {LLM_MODEL!r}. Check LLM_API_KEY and LLM_MODEL.",
@@ -94,8 +79,7 @@ def synthesize_answer(question: str, context: str) -> str:
     try:
         answer = response.json()["choices"][0]["message"]["content"]
     except (ValueError, KeyError, IndexError, TypeError):
-        # Not a chat-completions response - usually LLM_BASE_URL pointing at
-        # something that is not an OpenAI-compatible endpoint.
+        
         return _context_with_note(
             f"the response from {LLM_BASE_URL} was not in chat-completions "
             "format. Check that LLM_BASE_URL ends with the OpenAI-compatible "

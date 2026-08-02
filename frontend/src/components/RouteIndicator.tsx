@@ -7,13 +7,7 @@ interface RouteIndicatorProps {
   commitHits: number;
 }
 
-/* Shows which of the two knowledge sources the question was routed to.
- *
- * The distinction that matters: a source is lit because it was *searched*,
- * not because it returned something. "both" with zero commit hits means the
- * history was searched and had nothing - meaningfully different from the
- * history never being consulted, which is what a plain hit count would hide.
- */
+
 export function RouteIndicator({ route, codeHits, commitHits }: RouteIndicatorProps) {
   const searchedCode = route === "code" || route === "both";
   const searchedCommits = route === "commits" || route === "both";

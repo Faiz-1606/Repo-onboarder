@@ -1,10 +1,3 @@
-/* Typed client for the Repo Onboarding Assistant API.
- *
- * VITE_API_BASE_URL is empty by default, which means "same origin as this
- * page" - correct when the backend serves the built frontend. Set it when the
- * two are deployed separately, and add this page's origin to the backend's
- * ALLOWED_ORIGINS or the browser will block the request before it is sent.
- */
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
@@ -30,7 +23,6 @@ export interface ChatReply {
   commit_hits: number;
 }
 
-/** Thrown for any non-2xx response, carrying the API's own `detail` string. */
 export class ApiError extends Error {
   readonly status: number;
 
@@ -45,8 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_BASE}${path}`, init);
   } catch {
-    // A CORS rejection also lands here, indistinguishable from the API being
-    // down - the browser deliberately withholds the reason.
+    
     throw new ApiError(
       `Could not reach the API${API_BASE ? ` at ${API_BASE}` : ""}.`,
       0,
@@ -57,7 +48,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     body = await response.json();
   } catch {
-    /* a non-JSON error page; fall through to statusText */
+    
   }
 
   if (!response.ok) {

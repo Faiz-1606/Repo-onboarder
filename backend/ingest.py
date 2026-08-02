@@ -1,10 +1,3 @@
-"""Clone a repository, chunk it two ways, and index both into the store.
-
-This module owns the whole ingestion sequence so nothing else has to know the
-order of operations. The one subtlety worth reading closely is the pair of
-_*_chunk_text() functions: what gets embedded is deliberately not the same as
-what gets stored.
-"""
 
 from __future__ import annotations
 
@@ -24,8 +17,9 @@ from backend.config import (
     MAX_COMMITS,
 )
 from backend.vectorstore import RepoVectorStore
+from chunkers.code_chunk import CodeChunk
 from chunkers.git_history import CommitChunk, get_commit_history
-from chunkers.python_chunker import CodeChunk, chunk_repo
+from chunkers.repo import chunk_repo
 
 
 def _validate_repo_url(repo_url: str) -> None:
@@ -90,8 +84,7 @@ def clone_repo(repo_url: str) -> Path:
 
     if result.returncode != 0:
         _remove_clone(destination)
-        # git's own stderr says useful things like "repository not found",
-        # and this string is what the client eventually displays.
+       
         raise RuntimeError(f"git clone failed: {result.stderr.strip()}")
 
     return destination
@@ -141,9 +134,7 @@ def ingest_repo(
         code_chunks, files_seen = chunk_repo(repo_path)
         commits = get_commit_history(repo_path, max_commits=max_commits)
 
-        # asdict() keeps every field of the chunk in the payload, because the
-        # citation is built from those fields later. Only the *embedded* text
-        # is trimmed and reordered.
+       
         code_indexed = store.index(
             CODE_COLLECTION,
             [_code_chunk_text(chunk) for chunk in code_chunks],
@@ -155,8 +146,7 @@ def ingest_repo(
             [asdict(commit) for commit in commits],
         )
     finally:
-        # The working tree was only needed to produce chunks; everything the
-        # query path reads now lives in the payloads.
+        
         _remove_clone(repo_path)
 
     return {

@@ -9,8 +9,7 @@ import { ask, getIndexStatus, startIndexing, type IndexStats } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 1500;
 
-/* One example per route, so the routing behaviour is discoverable without
-   having to read the README first. */
+
 const EXAMPLE_QUESTIONS = [
   "Where is the setup configuration?",
   "Why was the license changed?",
@@ -37,9 +36,7 @@ export default function App() {
   const [asking, setAsking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Poll until indexing leaves the "indexing" state. setTimeout is chained
-  // after each response rather than setInterval, so a slow reply can never
-  // stack up overlapping requests.
+  
   useEffect(() => {
     if (phase.name !== "indexing") return;
 
@@ -78,8 +75,7 @@ export default function App() {
     };
   }, [phase]);
 
-  // Separate from the poll so the counter moves every second rather than
-  // every poll.
+  
   useEffect(() => {
     if (phase.name !== "indexing") return;
     const id = window.setInterval(

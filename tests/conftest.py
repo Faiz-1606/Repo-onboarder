@@ -1,9 +1,4 @@
-"""Shared fixtures.
 
-The repository fixture is a real git repo on disk rather than a mock. The
-commit-history code parses actual `git log` and `git show --stat` output, so
-faking subprocess would test the fake instead of the parsing.
-"""
 
 import shutil
 import subprocess
@@ -12,17 +7,14 @@ from pathlib import Path
 
 import pytest
 
-# Make the project importable as `backend.*` / `chunkers.*` when pytest is run
-# from the repository root.
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import ingest  # noqa: E402
 from backend.ingest import ingest_repo  # noqa: E402
 from backend.vectorstore import RepoVectorStore  # noqa: E402
 
-# One file with a deliberate shape: a call chain (login -> normalise_email,
-# hash_password), a class with a method and an async method, a closure that
-# must not be split out, and a function unrelated to everything else.
+
 SAMPLE_SOURCE = '''"""Authentication entry points."""
 
 

@@ -2,9 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* A dark, slightly blue slate. The two accents map to the two knowledge
-   sources the whole system is built around - green for code, amber for commit
-   history - so the routing decision is readable by colour alone. */
+
 @layer base {
   :root {
     --background: 220 19% 6%;
@@ -35,7 +33,7 @@
     --input: 219 16% 20%;
     --ring: 146 53% 45%;
 
-    /* Corners stay tight. Large uniform radii read as generic. */
+    
     --radius: 0.25rem;
 
     --code-accent: 146 53% 63%;
@@ -50,8 +48,7 @@
   }
 
   html {
-    /* Deliberately not Inter - the system UI face is sharper at small sizes
-       and costs no download. */
+    
     font-family:
       system-ui,
       -apple-system,
@@ -77,8 +74,7 @@
 }
 
 @layer utilities {
-  /* A faint grid behind the header, so the page has some texture without
-     resorting to a gradient. */
+ 
   .bg-grid {
     background-image:
       linear-gradient(hsl(var(--border) / 0.55) 1px, transparent 1px),

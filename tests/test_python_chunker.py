@@ -1,6 +1,7 @@
 """AST chunking: what becomes a chunk, and what deliberately does not."""
 
-from chunkers.python_chunker import chunk_python_file, chunk_repo
+from chunkers.python_chunker import chunk_python_file
+from chunkers.repo import chunk_repo
 
 
 def chunk_named(chunks, name):

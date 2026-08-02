@@ -1,13 +1,4 @@
-"""Vector storage and the embedding layer behind it.
 
-Qdrant runs in on-disk mode here: the client opens a file-backed instance
-directly, so there is no server process to provision. It also supports
-payload filtering, which is what the exact-name lookups in call-graph
-expansion depend on.
-
-The embedding layer sits behind a Protocol so the default lexical embedder can
-be swapped for a real semantic one without touching anything else.
-"""
 
 from __future__ import annotations
 
@@ -54,15 +45,14 @@ class TfidfEmbedder:
     """
 
     def __init__(self, max_features: int = TFIDF_MAX_FEATURES) -> None:
-        # Capping the vocabulary bounds the vector width, since TF-IDF
-        # produces one dimension per term it learned.
+        
         self._vectorizer = TfidfVectorizer(max_features=max_features)
 
     def fit(self, texts: list[str]) -> None:
         self._vectorizer.fit(texts)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        # TF-IDF vectors are sparse; Qdrant wants dense ones.
+        
         return self._vectorizer.transform(texts).toarray().tolist()
 
 
@@ -134,9 +124,7 @@ class RepoVectorStore:
         embedding text differently from the data it wants back.
         """
         if not texts:
-            # Nothing to fit a vectorizer on. Leaving the collection
-            # uncreated is what lets search() answer [] for, say, a repo
-            # with no Python in it.
+           
             return 0
 
         embedder = self._embedder_factory()
@@ -144,8 +132,7 @@ class RepoVectorStore:
         vectors = embedder.embed(texts)
         self._embedders[collection] = embedder
 
-        # The vector width is only known once the embedder has been fitted,
-        # so the collection has to be created here rather than up front.
+       
         if self._client.collection_exists(collection):
             self._client.delete_collection(collection)
         self._client.create_collection(
@@ -156,8 +143,7 @@ class RepoVectorStore:
             ),
         )
 
-        # Qdrant point ids must be ints or UUIDs, so the list index is the id
-        # and the human-readable chunk id travels in the payload.
+        
         self._client.upsert(
             collection_name=collection,
             points=[
@@ -183,14 +169,12 @@ class RepoVectorStore:
         """
         embedder = self._embedders.get(collection)
         if embedder is None:
-            # Nothing was ever indexed here - e.g. a repo with no .py files.
+           
             return []
 
         vector = embedder.embed([query])[0]
         if not any(vector):
-            # TF-IDF found no vocabulary overlap between the question and the
-            # corpus. Cosine similarity against a zero vector is undefined, and
-            # "no lexical match" is the truthful answer anyway.
+            
             return []
 
         query_filter = None

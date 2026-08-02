@@ -1,10 +1,3 @@
-/* Parses the small, known subset of markdown the backend emits.
- *
- * A full parser would be a dependency for no reason: the API only ever
- * produces "## " headings, ``` fences and `inline code`. Parsing into typed
- * blocks also means the UI renders React elements rather than raw HTML, so
- * there is no escaping to get wrong.
- */
 
 export type AnswerBlock =
   | { kind: "heading"; text: string }
@@ -13,7 +6,7 @@ export type AnswerBlock =
 
 export type InlineSpan = { code: boolean; text: string };
 
-/** Split prose on `backticks`, keeping the segments in order. */
+
 export function parseInline(text: string): InlineSpan[] {
   return text
     .split(/`([^`\n]+)`/g)
@@ -25,10 +18,10 @@ export function parseAnswer(answer: string): AnswerBlock[] {
   const blocks: AnswerBlock[] = [];
 
   answer.split("```").forEach((section, index) => {
-    // Odd sections sit between fences.
+    
     if (index % 2 === 1) {
       const newline = section.indexOf("\n");
-      // Drop the language tag on the opening line.
+      
       const code = (newline === -1 ? section : section.slice(newline + 1)).replace(
         /\n$/,
         "",
@@ -37,8 +30,7 @@ export function parseAnswer(answer: string): AnswerBlock[] {
       return;
     }
 
-    // Prose: pull "## " headings out, and keep runs of ordinary lines together
-    // so blank lines inside a commit message survive.
+   
     let pending: string[] = [];
     const flush = () => {
       const text = pending.join("\n").trim();

@@ -1,13 +1,3 @@
-"""Extract commit history from a cloned repository using the git CLI.
-
-Reading the local clone instead of the GitHub API avoids rate limits entirely
-and works the same for any git host, not just GitHub.
-
-This is deliberately simple rather than fast: one `git log` for all commits,
-then one `git show --stat` per commit for its file list. That is O(n)
-subprocess calls, which is fine at the hundreds-of-commits scale and is why
-config.MAX_COMMITS exists.
-"""
 
 from __future__ import annotations
 
@@ -17,14 +7,11 @@ from pathlib import Path
 
 from backend.config import GIT_COMMAND_TIMEOUT_SECONDS, MAX_COMMITS
 
-# ASCII unit and record separators. Commit messages routinely contain commas,
-# pipes and newlines, so any printable delimiter would eventually split a
-# message in the wrong place. These two cannot appear in a message, which
-# makes naive splitting genuinely safe here.
+
 FIELD_SEPARATOR = "\x1f"
 RECORD_SEPARATOR = "\x1e"
 
-# hash, author name, author date (strict ISO 8601), raw subject + body.
+
 LOG_FORMAT = f"%H{FIELD_SEPARATOR}%an{FIELD_SEPARATOR}%aI{FIELD_SEPARATOR}%B{RECORD_SEPARATOR}"
 
 
@@ -77,9 +64,7 @@ def _parse_stat_output(output: str) -> tuple[list[str], str]:
         if not line:
             continue
         if "|" in line:
-            # Binary files ("Bin 0 -> 512 bytes") and renames ("a.py => b.py")
-            # still land here, which is what we want - the name is the useful
-            # part either way.
+           
             files_changed.append(line.split("|")[0].strip())
         else:
             diff_summary = line
@@ -111,8 +96,7 @@ def get_commit_history(
         ["log", f"-n{max_commits}", f"--format={LOG_FORMAT}"],
         repo_path,
     )
-    # A repository with no commits yet makes `git log` exit non-zero. There is
-    # no history to index in that case, which is not an error worth failing on.
+    
     if result.returncode != 0:
         return []
 
@@ -124,8 +108,7 @@ def get_commit_history(
 
         fields = record.split(FIELD_SEPARATOR)
         if len(fields) != 4:
-            # Malformed record - should not happen with these separators, but
-            # skipping one commit beats aborting the whole history.
+           
             continue
 
         commit_hash, author, date, message = fields

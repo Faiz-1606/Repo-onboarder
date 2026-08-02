@@ -9,8 +9,7 @@ export interface Turn {
   error: string | null;
 }
 
-/* Each pairing shows the route before the answer, so you can see which source
-   was consulted before reading what it said. */
+
 export function Conversation({ turns }: { turns: Turn[] }) {
   return (
     <div className="space-y-8">

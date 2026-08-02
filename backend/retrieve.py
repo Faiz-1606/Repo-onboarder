@@ -1,10 +1,4 @@
-"""Decide what to search, search it, and format the result for the model.
 
-Routing happens before retrieval, which is the whole point of keeping code and
-commit history in separate collections: a "why" question is answered from
-commit messages, and searching the code for it would only return
-plausible-looking noise.
-"""
 
 from __future__ import annotations
 
@@ -20,15 +14,13 @@ from backend.config import (
 from backend.models import Route
 from backend.vectorstore import RepoVectorStore, SearchHit
 
-# Words that suggest the answer is a decision or a change - things that live in
-# commit messages, not in the code itself.
+
 WHY_PATTERNS = re.compile(
     r"\b(why|decided|decision|reason|history|changed|switched|chose|rationale)\b",
     re.IGNORECASE,
 )
 
-# Words that suggest the answer is a location or a definition, which the code
-# genuinely does contain.
+
 WHERE_PATTERNS = re.compile(
     r"\b(where|which file|find|locate|show me)\b",
     re.IGNORECASE,
@@ -79,10 +71,7 @@ def expand_via_calls(
     expanded: list[SearchHit] = []
 
     for name in called_names:
-        # Filtering on the exact name is what makes this a call-graph lookup
-        # rather than another similarity search. The name is also used as the
-        # query text because it is nearly always in the vocabulary already -
-        # it appears in the source of the chunk that calls it.
+       
         matches = store.search(
             CODE_COLLECTION,
             name,
@@ -115,8 +104,7 @@ def _format_commit_hit(payload: dict) -> str:
     date = payload["date"][:10]  # the YYYY-MM-DD part of the ISO timestamp
 
     lines = [f"- {short_hash} ({date}, {payload['author']})"]
-    # Indent the message under its bullet; rstrip keeps blank lines in a
-    # commit body from becoming lines of trailing whitespace.
+   
     lines.extend(f"  {line}".rstrip() for line in payload["message"].splitlines())
     if payload.get("files_changed"):
         lines.append(f"  files: {', '.join(payload['files_changed'])}")
@@ -144,8 +132,7 @@ def format_context_for_llm(
         sections.append("## Commit history\n\n" + "\n\n".join(blocks))
 
     if not sections:
-        # Saying so explicitly matters: an empty context block would invite
-        # the model to answer from its own knowledge instead of the repo.
+        
         return "No matching code or commits were found in this repository."
 
     return "\n\n".join(sections)
@@ -173,9 +160,7 @@ def retrieve_context(
 
     if route in ("code", "both"):
         code_hits = store.search(CODE_COLLECTION, question, top_k=top_k)
-        # Expansion results are counted as code hits because that is where
-        # they came from - the client's hit count should reflect everything
-        # the model was actually shown.
+       
         code_hits = code_hits + expand_via_calls(store, code_hits)
 
     if route in ("commits", "both"):

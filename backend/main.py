@@ -1,9 +1,4 @@
-"""FastAPI application: four routes, plus the frontend served from the root.
 
-Indexing runs as a background task because cloning and chunking a repository
-takes far too long to hold an HTTP request open for. The client gets a
-session_id immediately and polls until the status leaves "indexing".
-"""
 
 from __future__ import annotations
 
@@ -36,11 +31,7 @@ app = FastAPI(
     "code and its commit history.",
 )
 
-# Needed only when the frontend is hosted separately - with one process serving
-# both, ALLOWED_ORIGINS is empty and no origin matches, which is the same as
-# having no CORS at all. Only the two verbs and the one header the frontend
-# actually sends are permitted, and credentials are never allowed: there are no
-# cookies or sessions here, and allowing them would widen this needlessly.
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -59,10 +50,7 @@ class Session:
     error: str | None = None
 
 
-# In memory, on purpose - this is the simplest thing that works for a
-# single-process demo. The consequences are real and worth knowing: a restart
-# loses every indexed repo, and the app cannot run behind more than one worker
-# because a second worker would not share this dict.
+
 SESSIONS: dict[str, Session] = {}
 
 
@@ -75,15 +63,13 @@ def run_indexing(session_id: str, repo_url: str) -> None:
         store = RepoVectorStore(STORAGE_ROOT / session_id)
         stats = ingest_repo(repo_url, store)
 
-        # Order matters: fill in the results first, flip the status last. A
-        # poller that sees "ready" must be guaranteed to find a usable store.
+        
         session.store = store
         session.stats = IndexStats(**stats)
         session.status = "ready"
     except Exception as exc:
         if store is not None:
-            # Release the on-disk lock rather than leaking it for the life of
-            # the process.
+            
             store.close()
         session.error = str(exc)
         session.status = "failed"
@@ -144,9 +130,7 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-# Mounted last: StaticFiles at "/" would shadow any route declared after it.
-# The is_dir() guard keeps the API importable when the frontend is absent,
-# which matters for the tests and for a backend-only deployment.
+
 if FRONTEND_DIR.is_dir():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 

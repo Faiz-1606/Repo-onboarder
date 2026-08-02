@@ -4,7 +4,7 @@ Ask questions about an unfamiliar codebase and get answers with citations —
 either a `file:line` in the source, or the commit that explains why something
 is the way it is.
 
-**Stack:** FastAPI · Qdrant · scikit-learn · React + TypeScript + Tailwind
+**Stack:** FastAPI · Qdrant · scikit-learn · tree-sitter · React + TypeScript + Tailwind
 
 Embeddings are computed locally with scikit-learn — no model downloads, no
 embedding API. Answers are written by any OpenAI-compatible chat model, which
@@ -108,9 +108,12 @@ FastAPI background task, because cloning and indexing takes seconds to minutes.
 1. **Clone** into a temp directory (`git clone`, full history — not shallow,
    since the history is half the point).
 2. **Two independent extraction passes:**
-   - `chunk_repo()` parses every `.py` file with the stdlib `ast` module and
-     emits one chunk per function or class — never a fragment cut off
-     mid-body. Each chunk also records the function names it calls.
+   - `chunk_repo()` walks the tree and hands each file to the parser for its
+     language — the stdlib `ast` module for Python, tree-sitter grammars for
+     JavaScript, JSX, TypeScript and TSX. Either way it emits one chunk per
+     function, class or type, never a fragment cut off mid-body, and records
+     the function names each chunk calls. Only the parsing step is
+     language-specific; every parser returns the same `CodeChunk`.
    - `get_commit_history()` runs `git log` with `\x1f`/`\x1e` field delimiters
      (a commit message can contain commas and pipes, but not ASCII unit
      separators), then one `git show --stat` per commit for its file list.
@@ -174,7 +177,10 @@ backend/
   vectorstore.py  Qdrant wrapper and the embedding Protocol
   generate.py     system prompt and answer synthesis
 chunkers/
-  python_chunker.py   AST chunking, with call extraction
+  code_chunk.py       the CodeChunk every parser produces
+  python_chunker.py   Python, via the stdlib ast module
+  js_chunker.py       JavaScript/JSX/TypeScript/TSX, via tree-sitter
+  repo.py             walks a repo, dispatches by file extension
   git_history.py      git log / git show parsing
 frontend/         React + TypeScript + Tailwind (Vite)
   src/lib/api.ts       typed API client, one place that knows the base URL
@@ -235,7 +241,7 @@ Stated plainly, because each one is a deliberate trade rather than an oversight.
 | Limitation | Why | Impact |
 |---|---|---|
 | Embeddings are lexical (TF-IDF), not semantic | Fully offline, zero downloads, no external dependency | Won't match a question whose wording differs from the code's own vocabulary. *"how are passwords hashed"* misses a corpus containing `hash_password`, because `hashed` and `passwords` aren't the same tokens as `hash` and `password`. **This is the single highest-impact upgrade available.** |
-| Python-only chunking | Uses the stdlib `ast` module | Non-Python files are invisible to code retrieval. Commit history still covers them — git is language-agnostic. |
+| Only Python, JS and TS are parsed | Each language needs a grammar | A Go or Rust file is invisible to code retrieval. Commit history still covers it — git is language-agnostic. Adding a language is a parser plus one row in `LANGUAGE_BY_SUFFIX`. |
 | No PR or issue ingestion | Would need authenticated GitHub API calls with pagination | Design discussions that never reached a commit message aren't retrievable. |
 | Sessions live in memory | Simplest thing that works for a single-user demo | A restart loses every indexed repo, and the app can't run behind multiple workers. |
 | Regex query routing | Free, zero latency, right on common phrasings | Misroutes unusual wording containing none of the matched keywords. |
@@ -253,9 +259,10 @@ In priority order by expected impact on answer quality.
 2. **PR and issue ingestion.** A third collection from the GitHub REST API, one
    chunk per closed PR kept whole, since a design debate only makes sense read
    end to end.
-3. **Multi-language support** via tree-sitter grammars dispatched by file
-   extension. `CodeChunk` stays identical across languages, so `retrieve.py`
-   and `generate.py` don't change at all.
+3. ~~Multi-language support via tree-sitter.~~ **Done** — Python, JavaScript,
+   JSX, TypeScript and TSX. `CodeChunk` stayed identical, so `retrieve.py`,
+   `generate.py` and the frontend needed no changes at all. Adding Go or Rust
+   is a parser module plus one row in `LANGUAGE_BY_SUFFIX`.
 4. **LLM routing fallback.** Keep the regex as the fast path; escalate only
    when it's ambiguous.
 5. **Persistent, multi-user sessions.** Redis for session metadata plus a

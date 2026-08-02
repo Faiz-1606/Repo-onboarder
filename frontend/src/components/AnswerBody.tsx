@@ -1,10 +1,6 @@
 import { parseAnswer, parseInline } from "@/lib/answer";
 
-/* Renders the answer as React elements rather than injected HTML.
- *
- * The vanilla version had to escape everything by hand before setting
- * innerHTML; building elements sidesteps that class of bug entirely, since
- * React escapes text nodes for us. */
+
 export function AnswerBody({ answer }: { answer: string }) {
   return (
     <div className="space-y-3">
@@ -22,8 +18,7 @@ export function AnswerBody({ answer }: { answer: string }) {
 
         if (block.kind === "code") {
           return (
-            // Long lines scroll inside the block; the page never scrolls
-            // sideways. min-w-0 is what lets it shrink inside a flex column.
+            
             <pre
               key={index}
               className="scrollbar-thin min-w-0 overflow-x-auto rounded-sm border border-border bg-background p-3 text-[12.5px] leading-relaxed"
