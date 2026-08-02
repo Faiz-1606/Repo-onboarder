@@ -1,0 +1,13 @@
+.git
+.claude
+tests
+__pycache__
+*.pyc
+.pytest_cache
+README.md
+Dockerfile
+.dockerignore
+
+# Built inside the image by the node stage, never copied from the host.
+node_modules
+frontend/dist

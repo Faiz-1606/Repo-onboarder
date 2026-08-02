@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node / Vite
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Tooling
+.pytest_cache/
+.claude/
+
+# Local environment - never commit keys
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* A dark, slightly blue slate. The two accents map to the two knowledge
+   sources the whole system is built around - green for code, amber for commit
+   history - so the routing decision is readable by colour alone. */
+@layer base {
+  :root {
+    --background: 220 19% 6%;
+    --foreground: 218 19% 92%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 218 19% 92%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 218 19% 92%;
+
+    --primary: 146 53% 63%;
+    --primary-foreground: 155 40% 10%;
+
+    --secondary: 219 16% 17%;
+    --secondary-foreground: 218 19% 92%;
+
+    --muted: 219 16% 17%;
+    --muted-foreground: 218 12% 59%;
+
+    --accent: 219 16% 20%;
+    --accent-foreground: 218 19% 92%;
+
+    --destructive: 6 66% 62%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 219 16% 17%;
+    --input: 219 16% 20%;
+    --ring: 146 53% 45%;
+
+    /* Corners stay tight. Large uniform radii read as generic. */
+    --radius: 0.25rem;
+
+    --code-accent: 146 53% 63%;
+    --commit-accent: 35 68% 62%;
+    --both-accent: 212 62% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Deliberately not Inter - the system UI face is sharper at small sizes
+       and costs no download. */
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family:
+      ui-monospace,
+      "Cascadia Code",
+      "JetBrains Mono",
+      Consolas,
+      monospace;
+  }
+}
+
+@layer utilities {
+  /* A faint grid behind the header, so the page has some texture without
+     resorting to a gradient. */
+  .bg-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.55) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.55) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
