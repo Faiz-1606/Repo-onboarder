@@ -1,20 +1,33 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { Conversation, type Turn } from "@/components/Conversation";
+import { GitHubMark } from "@/components/icons";
+import { IndexingProgress } from "@/components/IndexingProgress";
 import { RepoForm } from "@/components/RepoForm";
 import { SessionPanel } from "@/components/SessionPanel";
+import { SourceCards } from "@/components/SourceCards";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ask, getIndexStatus, startIndexing, type IndexStats } from "@/lib/api";
+import { parseGitHubRepo } from "@/lib/github";
 
 const POLL_INTERVAL_MS = 1500;
 
 
+// The route each one takes is shown alongside it. These three are chosen to
+// hit all three outcomes, so the routing rule is learnable by clicking rather
+// than by reading documentation.
 const EXAMPLE_QUESTIONS = [
-  "Where is the setup configuration?",
-  "Why was the license changed?",
-  "How does the build process work?",
-];
+  { text: "Where is the setup configuration?", route: "code" },
+  { text: "Why was the license changed?", route: "commits" },
+  { text: "How does the build process work?", route: "both" },
+] as const;
+
+const ROUTE_ACCENT: Record<string, string> = {
+  code: "var(--code-accent)",
+  commits: "var(--commit-accent)",
+  both: "var(--both-accent)",
+};
 
 type Phase =
   | { name: "idle" }
@@ -34,6 +47,9 @@ export default function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
+  // Only covers the POST /index round trip; once it returns, the phase
+  // becomes "indexing" and IndexingProgress takes over.
+  const [submitting, setSubmitting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   
@@ -92,6 +108,7 @@ export default function App() {
   const beginIndexing = async (repoUrl: string) => {
     setPhase({ name: "idle" });
     setElapsed(0);
+    setSubmitting(true);
     try {
       const started = await startIndexing(repoUrl);
       setPhase({
@@ -102,6 +119,8 @@ export default function App() {
       });
     } catch (error) {
       setPhase({ name: "failed", error: (error as Error).message });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -141,28 +160,59 @@ export default function App() {
     setElapsed(0);
   };
 
+  // Only used for linking citations back to the source; a non-GitHub repo
+  // indexes exactly the same, its citations just stay unlinked.
+  const repo = phase.name === "ready" ? parseGitHubRepo(phase.repoUrl) : null;
+
   return (
-    <div className="min-h-screen">
-      <header className="bg-grid border-b border-border">
-        <div className="mx-auto max-w-5xl px-6 py-8">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
+    // The grid runs the full page. Panels use an opaque bg-card so they read
+    // as sitting on top of it.
+    <div className="bg-grid min-h-screen">
+      {/* Persistent chrome. The hero below only appears before a repo is
+          loaded - once you are working, the header gets out of the way. */}
+      <header className="sticky top-0 z-10 border-b border-border bg-background/85 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-3">
+          <GitHubMark className="h-4 w-4 shrink-0 text-primary" />
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Repo Onboarding Assistant
-          </p>
-          <h1 className="mt-2 max-w-xl text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">
-            Ask an unfamiliar codebase why, not just where.
-          </h1>
-          <p className="mt-2.5 max-w-lg text-[13.5px] leading-relaxed text-muted-foreground">
-            Code and commit history are indexed as two separate sources. Each
-            question is routed to whichever one can actually answer it.
-          </p>
+          </span>
+          {repo && (
+            <>
+              <span className="text-border">/</span>
+              <a
+                href={repo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 truncate font-mono text-[12px] hover:text-primary"
+              >
+                {repo.owner}/{repo.name}
+              </a>
+            </>
+          )}
         </div>
       </header>
+
+      {phase.name !== "ready" && (
+        <div className="border-b border-border">
+          <div className="mx-auto max-w-5xl px-6 py-10">
+            <h1 className="max-w-xl text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">
+              Ask an unfamiliar codebase why, not just where.
+            </h1>
+            <p className="mt-2.5 max-w-lg text-[13.5px] leading-relaxed text-muted-foreground">
+              Code and commit history are indexed as two separate sources. Each
+              question is routed to whichever one can actually answer it, and
+              every answer links back to the exact line or commit on GitHub.
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         {phase.name === "ready" ? (
           <div className="flex flex-col gap-8 lg:flex-row">
             <SessionPanel
               repoUrl={phase.repoUrl}
+              repo={repo}
               stats={phase.stats}
               elapsedSeconds={phase.elapsedSeconds}
               onReset={reset}
@@ -177,18 +227,24 @@ export default function App() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {EXAMPLE_QUESTIONS.map((example) => (
                       <button
-                        key={example}
+                        key={example.text}
                         type="button"
-                        onClick={() => submitQuestion(example)}
-                        className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-left text-[12.5px] text-foreground/80 transition-colors hover:border-primary/50 hover:text-foreground"
+                        onClick={() => submitQuestion(example.text)}
+                        className="group flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-[12.5px] text-foreground/80 transition-colors hover:border-primary/50 hover:text-foreground"
                       >
-                        {example}
+                        {example.text}
+                        <span
+                          className="font-mono text-[10px] uppercase tracking-wider opacity-70"
+                          style={{ color: `hsl(${ROUTE_ACCENT[example.route]})` }}
+                        >
+                          {example.route}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
               ) : (
-                <Conversation turns={turns} />
+                <Conversation turns={turns} repo={repo} />
               )}
 
               <div ref={bottomRef} />
@@ -201,13 +257,17 @@ export default function App() {
               />
             </section>
           </div>
+        ) : phase.name === "indexing" ? (
+          <IndexingProgress elapsedSeconds={elapsed} />
         ) : (
-          <RepoForm
-            onSubmit={beginIndexing}
-            busy={phase.name === "indexing"}
-            elapsedSeconds={elapsed}
-            error={phase.name === "failed" ? phase.error : null}
-          />
+          <div className="space-y-8">
+            <RepoForm
+              onSubmit={beginIndexing}
+              submitting={submitting}
+              error={phase.name === "failed" ? phase.error : null}
+            />
+            <SourceCards />
+          </div>
         )}
       </main>
     </div>
