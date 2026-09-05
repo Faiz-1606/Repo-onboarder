@@ -53,6 +53,11 @@ def test_each_collection_gets_its_own_embedder(store):
 
     # Two vocabularies fitted separately end up different sizes. A shared
     # vectorizer would give both collections the same width.
+    #
+    # This is evidence specific to TF-IDF, which the `store` fixture pins.
+    # A pretrained model has no per-corpus state, so both collections come out
+    # at the model's fixed width - separate instances still exist, they just
+    # share the loaded weights.
     assert width(CODE_COLLECTION) != width(COMMIT_COLLECTION)
 
 

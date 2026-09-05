@@ -4,10 +4,10 @@ Ask questions about an unfamiliar codebase and get answers with citations —
 either a `file:line` in the source, or the commit that explains why something
 is the way it is.
 
-**Stack:** FastAPI · Qdrant · scikit-learn · tree-sitter · React + TypeScript + Tailwind
+**Stack:** FastAPI · Qdrant · fastembed · tree-sitter · React + TypeScript + Tailwind
 
-Embeddings are computed locally with scikit-learn — no model downloads, no
-embedding API. Answers are written by any OpenAI-compatible chat model, which
+Embeddings are computed locally by a real sentence-embedding model running on
+ONNX Runtime — no embedding API, no key, no per-query cost. Answers are written by any OpenAI-compatible chat model, which
 means a local model while you develop and a free hosted one once deployed,
 selected by environment variable rather than by changing code.
 
@@ -126,7 +126,12 @@ FastAPI background task, because cloning and indexing takes seconds to minutes.
 
 1. `classify_query()` runs two regexes — no LLM call, no latency — and returns
    `code`, `commits`, or `both`.
-2. The routed collection(s) are searched.
+2. The routed collection(s) are searched, and results below a **relevance
+   floor** are discarded. An embedding model always has a nearest neighbour,
+   so without this a repository with nothing to say about the question still
+   returns five confident-looking chunks. The floor lives on the embedder
+   rather than in global config, because similarity scores are not comparable
+   between embedding methods — TF-IDF sets its own to zero.
 3. If code was searched, `expand_via_calls()` takes the **single** best hit,
    reads up to 3 names from its recorded `calls` list, and runs one
    exact-name-filtered search each. One hop, no recursion, so the context stays
@@ -211,6 +216,9 @@ produces the citation.
 | `LLM_MODEL` | No | Defaults to `llama3.2:3b` |
 | `LLM_API_KEY` | Only for hosted providers | Empty — correct for local Ollama, which doesn't check it |
 | `ALLOWED_ORIGINS` | Only if the frontend is hosted separately | Empty — correct when one process serves both |
+| `EMBEDDING_BACKEND` | No | `fastembed` — set to `tfidf` for the low-memory, faster-indexing lexical fallback |
+| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` |
+| `SCORE_THRESHOLD` | No | `0.6` — the relevance floor for semantic search; TF-IDF sets its own to `0` |
 | `PORT` | Set by most hosts | Falls back to 8000 |
 
 No key is needed to run locally, and none is ever written to disk — the key is
@@ -240,7 +248,8 @@ Stated plainly, because each one is a deliberate trade rather than an oversight.
 
 | Limitation | Why | Impact |
 |---|---|---|
-| Embeddings are lexical (TF-IDF), not semantic | Fully offline, zero downloads, no external dependency | Won't match a question whose wording differs from the code's own vocabulary. *"how are passwords hashed"* misses a corpus containing `hash_password`, because `hashed` and `passwords` aren't the same tokens as `hash` and `password`. **This is the single highest-impact upgrade available.** |
+| Indexing is ~3× slower than the lexical fallback | Every chunk goes through the embedding model | Measured on `pypa/sampleproject` (204 chunks): 31.6s versus 11.4s, and slower still on a shared-CPU free tier. Set `EMBEDDING_BACKEND=tfidf` to trade retrieval quality for speed. |
+| Peak memory is ~292 MB | The ONNX inference arena plus the loaded model | Fits a 512 MB host, but not with much to spare. Bounded by `EMBEDDING_BATCH_SIZE`, not by repository size, so a large repo takes longer without taking more memory. |
 | Only Python, JS and TS are parsed | Each language needs a grammar | A Go or Rust file is invisible to code retrieval. Commit history still covers it — git is language-agnostic. Adding a language is a parser plus one row in `LANGUAGE_BY_SUFFIX`. |
 | No PR or issue ingestion | Would need authenticated GitHub API calls with pagination | Design discussions that never reached a commit message aren't retrievable. |
 | Sessions live in memory | Simplest thing that works for a single-user demo | A restart loses every indexed repo, and the app can't run behind multiple workers. |
@@ -253,9 +262,12 @@ Stated plainly, because each one is a deliberate trade rather than an oversight.
 
 In priority order by expected impact on answer quality.
 
-1. **Real embeddings.** Swap `TfidfEmbedder` for `SentenceTransformerEmbedder`
-   via the existing `embedder_factory` parameter on `RepoVectorStore` — no
-   other code changes required.
+1. ~~Real embeddings.~~ **Done** — `BAAI/bge-small-en-v1.5` (384-dim) via
+   fastembed, swapped in through the existing `embedder_factory` parameter on
+   `RepoVectorStore` with no other code changes, exactly as designed.
+   fastembed rather than sentence-transformers because it runs on ONNX Runtime
+   instead of PyTorch, which is what keeps it inside a 512 MB host. TF-IDF is
+   still there behind `EMBEDDING_BACKEND=tfidf`.
 2. **PR and issue ingestion.** A third collection from the GitHub REST API, one
    chunk per closed PR kept whole, since a design debate only makes sense read
    end to end.

@@ -15,17 +15,31 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-from sklearn.feature_extraction.text import TfidfVectorizer
-
-from backend.config import DEFAULT_TOP_K, TFIDF_MAX_FEATURES
+from backend.config import (
+    DEFAULT_TOP_K,
+    EMBEDDING_BACKEND,
+    EMBEDDING_BATCH_SIZE,
+    EMBEDDING_CACHE_DIR,
+    EMBEDDING_MODEL,
+    EMBEDDING_THREADS,
+    SEMANTIC_SCORE_THRESHOLD,
+    TFIDF_MAX_FEATURES,
+)
 
 
 class EmbeddingProvider(Protocol):
     """What the store needs from an embedder.
 
-    Structural typing, so an implementation just needs these two methods -
-    there is no base class to inherit and nothing to register.
+    Structural typing, so an implementation just needs these members - there is
+    no base class to inherit and nothing to register.
     """
+
+    # Similarity scores are not comparable between embedding methods, so the
+    # floor below which results stop meaning anything belongs to the embedder
+    # rather than to global config. A store built with a different embedder
+    # then gets that embedder's floor, not one inherited from a setting that
+    # describes something else.
+    score_threshold: float
 
     def fit(self, texts: list[str]) -> None:
         """Learn whatever the embedder needs from the corpus."""
@@ -35,37 +49,100 @@ class EmbeddingProvider(Protocol):
 
 
 class TfidfEmbedder:
-    """The default: lexical, fully offline, no model download.
+    """Lexical fallback: fully offline, no model download, very little memory.
 
     TF-IDF is a real baseline rather than a placeholder - it is still a
     standard component of production hybrid search - but it matches on shared
     words, not meaning. A question phrased in different vocabulary than the
-    code it is asking about will not match well. That is the single biggest
-    quality limitation of the system as it stands.
+    code it is asking about will not match. Kept as the low-memory option and
+    for environments that cannot download model weights.
     """
 
+    # No floor. TF-IDF scores do not separate relevant from irrelevant: on
+    # pypa/sampleproject an unanswerable question scored 0.309 against 0.225
+    # for an answerable one, so any cutoff would discard good results before
+    # bad ones. Its honesty comes from returning nothing on zero word overlap,
+    # not from the score.
+    score_threshold = 0.0
+
     def __init__(self, max_features: int = TFIDF_MAX_FEATURES) -> None:
-        
+        # Deferred so a deployment running the semantic backend does not pay
+        # scikit-learn's import cost - measured at roughly 115 MB resident.
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
         self._vectorizer = TfidfVectorizer(max_features=max_features)
 
     def fit(self, texts: list[str]) -> None:
         self._vectorizer.fit(texts)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        
+        # TF-IDF vectors are sparse; Qdrant wants dense ones.
         return self._vectorizer.transform(texts).toarray().tolist()
 
 
-class SentenceTransformerEmbedder:
-    """Drop-in semantic replacement, for when model weights can be downloaded.
+# One loaded model is shared by every embedder instance. This is safe in a way
+# it would not be for TF-IDF: a pretrained model holds no per-corpus state, so
+# there is nothing to keep separate, and loading it once per collection would
+# double the memory for no benefit.
+_SHARED_MODELS: dict[str, object] = {}
 
-    The import is deferred into __init__ so `sentence-transformers` stays an
-    optional dependency: nothing breaks if it is not installed until you
-    actually ask for this embedder.
 
-    Pass it in as `RepoVectorStore(path, embedder_factory=SentenceTransformerEmbedder)`
-    - no other code changes.
+class FastEmbedEmbedder:
+    """Real sentence embeddings, run locally through ONNX Runtime.
+
+    This is the semantic upgrade over TF-IDF: it matches on meaning, so a
+    question worded differently from the code still finds it. fastembed is
+    used rather than sentence-transformers because it runs on ONNX Runtime
+    instead of PyTorch, which is the difference between fitting on a small
+    host and not.
+
+    The import is deferred so the package stays optional and a TF-IDF-only
+    install still works.
     """
+
+    score_threshold = SEMANTIC_SCORE_THRESHOLD
+
+    def __init__(
+        self,
+        model_name: str = EMBEDDING_MODEL,
+        batch_size: int = EMBEDDING_BATCH_SIZE,
+        threads: int = EMBEDDING_THREADS,
+    ) -> None:
+        self._batch_size = batch_size
+
+        key = f"{model_name}:{threads}"
+        if key not in _SHARED_MODELS:
+            from fastembed import TextEmbedding
+
+            options = {"model_name": model_name, "threads": threads}
+            if EMBEDDING_CACHE_DIR:
+                options["cache_dir"] = EMBEDDING_CACHE_DIR
+            # Downloads the weights on first use, then reads them from cache.
+            _SHARED_MODELS[key] = TextEmbedding(**options)
+
+        self._model = _SHARED_MODELS[key]
+
+    def fit(self, texts: list[str]) -> None:
+        """No-op: a pretrained model has nothing to learn from this corpus."""
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        # batch_size is the memory knob, not a speed one - see config.
+        return [
+            vector.tolist()
+            for vector in self._model.embed(texts, batch_size=self._batch_size)
+        ]
+
+
+class SentenceTransformerEmbedder:
+    """The PyTorch route to the same thing, kept for hosts with room for it.
+
+    FastEmbedEmbedder is the default because it needs no PyTorch. This one
+    exists for a machine with memory to spare that already has the
+    sentence-transformers ecosystem, or to use a model fastembed does not
+    package. The import is deferred so the dependency stays optional.
+    """
+
+    score_threshold = SEMANTIC_SCORE_THRESHOLD
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         from sentence_transformers import SentenceTransformer
@@ -77,6 +154,17 @@ class SentenceTransformerEmbedder:
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return self._model.encode(texts).tolist()
+
+
+def default_embedder() -> EmbeddingProvider:
+    """Build whichever embedder EMBEDDING_BACKEND selects.
+
+    Anything other than "tfidf" gets the semantic backend, so a typo fails
+    toward better retrieval rather than silently downgrading it.
+    """
+    if EMBEDDING_BACKEND == "tfidf":
+        return TfidfEmbedder()
+    return FastEmbedEmbedder()
 
 
 @dataclass
@@ -104,7 +192,7 @@ class RepoVectorStore:
     def __init__(
         self,
         storage_path: Path,
-        embedder_factory: EmbedderFactory = TfidfEmbedder,
+        embedder_factory: EmbedderFactory = default_embedder,
     ) -> None:
         storage_path.mkdir(parents=True, exist_ok=True)
         self._client = QdrantClient(path=str(storage_path))
@@ -188,11 +276,27 @@ class RepoVectorStore:
                 ]
             )
 
+        # A semantic model returns its nearest neighbours for any question,
+        # however unrelated - so without a floor, a repository that has nothing
+        # to say about the question still hands the model five plausible-looking
+        # chunks. The floor is what lets "no matching code" happen again.
+        #
+        # Deliberately not applied to a filtered lookup. There the filter is
+        # already the relevance guarantee (it pins the search to one named
+        # function), and the query text is a bare identifier, which can score
+        # below the floor against its own definition. Applying it would quietly
+        # break call-graph expansion.
+        # getattr, because a caller may supply an embedder of their own that
+        # predates this attribute; no floor is the safe default.
+        floor = getattr(embedder, "score_threshold", 0.0)
+        score_threshold = None if query_filter is not None else (floor or None)
+
         response = self._client.query_points(
             collection_name=collection,
             query=vector,
             limit=top_k,
             query_filter=query_filter,
+            score_threshold=score_threshold,
             with_payload=True,
         )
         return [

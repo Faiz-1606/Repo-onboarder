@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import ingest  # noqa: E402
 from backend.ingest import ingest_repo  # noqa: E402
-from backend.vectorstore import RepoVectorStore  # noqa: E402
+from backend.vectorstore import RepoVectorStore, TfidfEmbedder  # noqa: E402
 
 
 SAMPLE_SOURCE = '''"""Authentication entry points."""
@@ -109,8 +109,13 @@ def add_commit():
 
 @pytest.fixture
 def store(tmp_path):
-    """An empty vector store, closed afterwards so the lock is released."""
-    store = RepoVectorStore(tmp_path / "qdrant")
+    """An empty vector store, closed afterwards so the lock is released.
+
+    Pinned to TF-IDF rather than the default semantic backend: it needs no
+    model download, costs almost no memory, and gives deterministic scores.
+    The semantic backend has its own tests in test_embeddings.py.
+    """
+    store = RepoVectorStore(tmp_path / "qdrant", embedder_factory=TfidfEmbedder)
     yield store
     store.close()
 

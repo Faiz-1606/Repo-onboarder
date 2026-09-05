@@ -12,7 +12,7 @@ frontend/dist/
 
 # Tooling
 .pytest_cache/
-.claude/
+
 
 # Local environment - never commit keys
 .env
@@ -21,4 +21,3 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
-tests/

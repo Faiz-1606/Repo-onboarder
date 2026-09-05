@@ -46,6 +46,15 @@ COPY --chown=user requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Bake the embedding model into the image. Without this the first question on
+# a fresh instance would stall on a 67 MB download - and on a host with an
+# ephemeral filesystem it would re-download after every restart.
+ENV EMBEDDING_CACHE_DIR=$HOME/.cache/fastembed
+RUN python -c "\
+import os; \
+from fastembed import TextEmbedding; \
+TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir=os.environ['EMBEDDING_CACHE_DIR'])"
+
 COPY --chown=user backend/ backend/
 COPY --chown=user chunkers/ chunkers/
 COPY --from=frontend --chown=user /build/dist frontend/dist

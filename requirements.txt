@@ -5,7 +5,8 @@ pydantic>=2.6
 
 # Storage + embeddings
 qdrant-client>=1.10          # 1.10+ exposes query_points()
-scikit-learn>=1.4
+fastembed>=0.4               # ONNX sentence embeddings - no PyTorch
+scikit-learn>=1.4            # TF-IDF fallback (EMBEDDING_BACKEND=tfidf)
 
 # Code parsing. Python uses the stdlib ast module; these grammars cover
 # JavaScript, JSX, TypeScript and TSX.
